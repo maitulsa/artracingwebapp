@@ -57,6 +57,9 @@
   .pct{font-size:12px;color:var(--ink);width:42px;text-align:right;flex:none;
     font-variant-numeric:tabular-nums;}
 
+  #bottom{transition:transform 0.25s ease, opacity 0.25s ease;}
+  #bottom.hidden{transform:translateY(110%);opacity:0;pointer-events:none;}
+
   .hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);color:var(--dim);
     font-size:14px;text-align:center;z-index:5;pointer-events:none;max-width:240px;line-height:1.5;}
   .icon{font-size:15px;line-height:1;}
@@ -74,6 +77,7 @@
 <div class="bar" id="top">
   <button class="chip" id="addBtn"><span class="icon">＋</span>Add image</button>
   <button class="chip" id="lockBtn"><span class="icon">🔓</span>Lock</button>
+  <button class="chip" id="uiBtn"><span class="icon">⊟</span>Hide UI</button>
 </div>
 
 <!-- Bottom controls -->
@@ -290,6 +294,16 @@ document.getElementById('shrinkBtn').addEventListener('click', () => {
 });
 document.getElementById('growBtn').addEventListener('click', () => {
   state.scale = state.scale * 1.1; apply();
+});
+
+// ---- Hide/show UI ----
+const uiBtn = document.getElementById('uiBtn');
+const bottom = document.getElementById('bottom');
+uiBtn.addEventListener('click', () => {
+  const hiding = !bottom.classList.contains('hidden');
+  bottom.classList.toggle('hidden', hiding);
+  uiBtn.querySelector('.icon').textContent = hiding ? '⊞' : '⊟';
+  uiBtn.childNodes[1].textContent = hiding ? 'Show UI' : 'Hide UI';
 });
 
 // block double-tap zoom on iOS
