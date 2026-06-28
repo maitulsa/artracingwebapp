@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Tracer</title>
+<style>
+  :root{
+    --bg:#0a0a0b;
+    --panel:rgba(18,18,20,0.72);
+    --stroke:rgba(255,255,255,0.12);
+    --ink:#f4f2ee;
+    --dim:#9a978f;
+    --accent:#d8744f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    -webkit-user-select:none;user-select:none;}
+  #stage{position:fixed;inset:0;touch-action:none;overflow:hidden;}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;}
+  #overlay{position:absolute;left:50%;top:50%;max-width:none;will-change:transform;
+    transform-origin:center center;pointer-events:none;display:none;}
+  #overlay.show{display:block;}
+
+  /* Start gate */
+  #gate{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:18px;background:var(--bg);text-align:center;padding:32px;z-index:30;}
+  #gate h1{font-weight:600;font-size:22px;letter-spacing:-0.01em;margin:0;}
+  #gate p{color:var(--dim);font-size:14px;line-height:1.5;max-width:300px;margin:0;}
+  .start-btn{margin-top:6px;padding:14px 30px;border-radius:999px;border:1px solid var(--stroke);
+    background:var(--accent);color:#1a0d07;font-size:16px;font-weight:600;}
+
+  /* Top + bottom bars */
+  .bar{position:fixed;left:0;right:0;display:flex;gap:8px;padding:14px 16px;z-index:20;
+    align-items:center;}
+  #top{top:0;padding-top:max(14px,env(safe-area-inset-top));justify-content:space-between;}
+  #bottom{bottom:0;padding-bottom:max(14px,env(safe-area-inset-bottom));flex-direction:column;gap:10px;}
+  .chip{background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--stroke);border-radius:14px;color:var(--ink);font-size:13px;
+    font-weight:500;padding:11px 14px;display:flex;align-items:center;gap:7px;}
+  .chip:active{background:rgba(40,40,44,0.85);}
+  .chip.on{background:var(--accent);color:#1a0d07;border-color:transparent;}
+  .row{display:flex;gap:8px;width:100%;justify-content:center;flex-wrap:wrap;}
+
+  /* Sliders */
+  .slider-wrap{background:var(--panel);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+    border:1px solid var(--stroke);border-radius:16px;padding:10px 16px;width:100%;
+    display:flex;align-items:center;gap:14px;}
+  .slider-wrap label{font-size:12px;color:var(--dim);width:58px;flex:none;}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:4px;border-radius:2px;
+    background:rgba(255,255,255,0.18);}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;
+    border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,0.4);}
+  .pct{font-size:12px;color:var(--ink);width:42px;text-align:right;flex:none;
+    font-variant-numeric:tabular-nums;}
+
+  .hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);color:var(--dim);
+    font-size:14px;text-align:center;z-index:5;pointer-events:none;max-width:240px;line-height:1.5;}
+  .icon{font-size:15px;line-height:1;}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="video" playsinline muted autoplay></video>
+  <img id="overlay" alt="">
+  <div class="hint" id="hint">Tap "Add image" to load a reference, then position it over your paper.</div>
+</div>
+
+<!-- Top bar -->
+<div class="bar" id="top">
+  <button class="chip" id="addBtn"><span class="icon">＋</span>Add image</button>
+  <button class="chip" id="lockBtn"><span class="icon">🔓</span>Lock</button>
+</div>
+
+<!-- Bottom controls -->
+<div class="bar" id="bottom">
+  <div class="slider-wrap">
+    <label>Opacity</label>
+    <input type="range" id="opacity" min="5" max="100" value="50">
+    <span class="pct" id="opacityVal">50%</span>
+  </div>
+  <div class="slider-wrap">
+    <label>Contrast</label>
+    <input type="range" id="contrast" min="50" max="200" value="100">
+    <span class="pct" id="contrastVal">100%</span>
+  </div>
+  <div class="row">
+    <button class="chip" id="grayBtn"><span class="icon">◑</span>Greyscale</button>
+    <button class="chip" id="flipBtn"><span class="icon">⇋</span>Flip</button>
+    <button class="chip" id="resetBtn"><span class="icon">⟲</span>Reset</button>
+  </div>
+  <div class="row">
+    <button class="chip" id="rotateCCWBtn"><span class="icon">↺</span>Rotate L</button>
+    <button class="chip" id="rotateCWBtn"><span class="icon">↻</span>Rotate R</button>
+    <button class="chip" id="shrinkBtn"><span class="icon">−</span>Smaller</button>
+    <button class="chip" id="growBtn"><span class="icon">＋</span>Larger</button>
+  </div>
+</div>
+
+<!-- Start gate -->
+<div id="gate">
+  <h1>Tracer</h1>
+  <p>Mount your phone over your paper. The camera shows your page; your reference floats on top so you can trace or transfer it.</p>
+  <button class="start-btn" id="startBtn">Start camera</button>
+  <p style="font-size:12px;opacity:0.7">Needs camera permission. Works in Safari over https.</p>
+</div>
+
+<input type="file" id="file" accept="image/*" style="display:none">
+
+<script>
+const video   = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const stage   = document.getElementById('stage');
+const hint    = document.getElementById('hint');
+const gate    = document.getElementById('gate');
+
+// ---- Camera ----
+document.getElementById('startBtn').addEventListener('click', async () => {
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ ideal:'environment' } }, audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    gate.style.display = 'none';
+  }catch(err){
+    gate.querySelector('p').textContent =
+      'Could not open the camera: ' + err.message + '. Make sure the page is served over https and permission is allowed.';
+  }
+});
+
+// ---- Image load ----
+const file = document.getElementById('file');
+document.getElementById('addBtn').addEventListener('click', () => file.click());
+file.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  const url = URL.createObjectURL(f);
+  overlay.onload = () => {
+    const vw = innerWidth, vh = innerHeight;
+    const fit = Math.min(vw, vh) * 0.7 / Math.max(overlay.naturalWidth, overlay.naturalHeight);
+    state.scale = fit; state.tx = 0; state.ty = 0; state.angle = 0;
+    apply();
+  };
+  overlay.src = url;
+  overlay.classList.add('show');
+  hint.style.display = 'none';
+});
+
+// ---- Transform + filter state ----
+const state = { tx:0, ty:0, scale:1, angle:0, flip:1 };
+let locked = false;
+let opacityVal = 0.5;
+let contrastVal = 100;
+let grayscaleOn = false;
+
+function applyFilter(){
+  overlay.style.filter = `contrast(${contrastVal}%) grayscale(${grayscaleOn ? 1 : 0})`;
+}
+
+function apply(){
+  overlay.style.transform =
+    `translate(-50%,-50%) translate(${state.tx}px,${state.ty}px) `+
+    `rotate(${state.angle}deg) scale(${state.scale*state.flip}, ${state.scale})`;
+}
+
+// ---- Gestures: 1-finger drag, 2-finger pinch + rotate ----
+let pts = new Map();
+let start = null;
+
+function center(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2}; }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function angle(a,b){ return Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI; }
+
+stage.addEventListener('touchstart', e => {
+  if(locked || !overlay.classList.contains('show')) return;
+  e.preventDefault();
+  for(const t of e.changedTouches) pts.set(t.identifier,{x:t.clientX,y:t.clientY});
+  beginGesture();
+}, {passive:false});
+
+stage.addEventListener('touchmove', e => {
+  if(locked || !overlay.classList.contains('show')) return;
+  e.preventDefault();
+  for(const t of e.touches) if(pts.has(t.identifier)) pts.set(t.identifier,{x:t.clientX,y:t.clientY});
+  const arr = [...pts.values()];
+  if(!start) return;
+
+  if(arr.length === 1){
+    state.tx = start.tx + (arr[0].x - start.c.x);
+    state.ty = start.ty + (arr[0].y - start.c.y);
+  } else if(arr.length >= 2){
+    const c = center(arr[0],arr[1]);
+    state.scale = Math.max(0.05, start.scale * (dist(arr[0],arr[1]) / start.dist));
+    state.angle = start.angle + (angle(arr[0],arr[1]) - start.ang);
+    state.tx = start.tx + (c.x - start.c.x);
+    state.ty = start.ty + (c.y - start.c.y);
+  }
+  apply();
+}, {passive:false});
+
+function endTouch(e){
+  for(const t of e.changedTouches) pts.delete(t.identifier);
+  beginGesture();
+}
+stage.addEventListener('touchend', endTouch);
+stage.addEventListener('touchcancel', endTouch);
+
+function beginGesture(){
+  const arr = [...pts.values()];
+  if(arr.length === 0){ start = null; return; }
+  if(arr.length === 1){
+    start = { tx:state.tx, ty:state.ty, scale:state.scale, angle:state.angle,
+              c:arr[0], dist:1, ang:0 };
+  } else {
+    start = { tx:state.tx, ty:state.ty, scale:state.scale, angle:state.angle,
+              c:center(arr[0],arr[1]), dist:dist(arr[0],arr[1]), ang:angle(arr[0],arr[1]) };
+  }
+}
+
+// ---- Opacity ----
+const opacitySlider = document.getElementById('opacity');
+const opacityLabel  = document.getElementById('opacityVal');
+opacitySlider.addEventListener('input', () => {
+  opacityVal = opacitySlider.value / 100;
+  overlay.style.opacity = opacityVal;
+  opacityLabel.textContent = opacitySlider.value + '%';
+});
+overlay.style.opacity = opacityVal;
+
+// ---- Contrast ----
+const contrastSlider = document.getElementById('contrast');
+const contrastLabel  = document.getElementById('contrastVal');
+contrastSlider.addEventListener('input', () => {
+  contrastVal = Number(contrastSlider.value);
+  contrastLabel.textContent = contrastVal + '%';
+  applyFilter();
+});
+
+// ---- Lock ----
+const lockBtn = document.getElementById('lockBtn');
+lockBtn.addEventListener('click', () => {
+  locked = !locked;
+  lockBtn.classList.toggle('on', locked);
+  lockBtn.querySelector('.icon').textContent = locked ? '🔒' : '🔓';
+  lockBtn.childNodes[1].textContent = locked ? 'Locked' : 'Lock';
+});
+
+// ---- Greyscale ----
+const grayBtn = document.getElementById('grayBtn');
+grayBtn.addEventListener('click', () => {
+  grayscaleOn = !grayscaleOn;
+  grayBtn.classList.toggle('on', grayscaleOn);
+  applyFilter();
+});
+
+// ---- Flip ----
+document.getElementById('flipBtn').addEventListener('click', () => {
+  state.flip *= -1; apply();
+});
+
+// ---- Reset ----
+document.getElementById('resetBtn').addEventListener('click', () => {
+  const vw = innerWidth, vh = innerHeight;
+  const fit = overlay.naturalWidth
+    ? Math.min(vw,vh)*0.7/Math.max(overlay.naturalWidth,overlay.naturalHeight) : 1;
+  state.tx=0; state.ty=0; state.scale=fit; state.angle=0; state.flip=1;
+  opacitySlider.value = 50; opacityVal = 0.5; opacityLabel.textContent = '50%';
+  overlay.style.opacity = opacityVal;
+  contrastSlider.value = 100; contrastVal = 100; contrastLabel.textContent = '100%';
+  grayscaleOn = false; grayBtn.classList.remove('on');
+  applyFilter(); apply();
+});
+
+// ---- Rotate buttons (15° steps) ----
+document.getElementById('rotateCCWBtn').addEventListener('click', () => {
+  state.angle -= 15; apply();
+});
+document.getElementById('rotateCWBtn').addEventListener('click', () => {
+  state.angle += 15; apply();
+});
+
+// ---- Size buttons (10% steps) ----
+document.getElementById('shrinkBtn').addEventListener('click', () => {
+  state.scale = Math.max(0.05, state.scale * 0.9); apply();
+});
+document.getElementById('growBtn').addEventListener('click', () => {
+  state.scale = state.scale * 1.1; apply();
+});
+
+// block double-tap zoom on iOS
+document.addEventListener('gesturestart', e => e.preventDefault());
+</script>
+</body>
+</html>
